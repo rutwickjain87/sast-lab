@@ -13,7 +13,6 @@
 from __future__ import annotations
 
 import os
-import re
 import subprocess
 import tempfile
 
@@ -32,43 +31,29 @@ app.config["DATABASE_URL"] = DATABASE_URL
 _DB_PATH = os.path.join(tempfile.gettempdir(), "app.db")
 os.environ.setdefault("APP_DB_PATH", _DB_PATH)
 
-# Allowlist: only valid hostnames and IPv4/IPv6 addresses are permitted.
-_HOST_RE = re.compile(
-    r"^(?:"
-    r"(?:[a-zA-Z0-9](?:[a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?\.)*[a-zA-Z0-9]{1,63}"  # hostname
-    r"|(?:\d{1,3}\.){3}\d{1,3}"  # IPv4
-    r"|(?:[0-9a-fA-F]{0,4}:){2,7}[0-9a-fA-F]{0,4}"  # IPv6
-    r")$"
-)
-
 
 @app.before_request
 def setup():
     init_db()
 
 
-# ── CWE-78: Command Injection (FIXED) ────────────────────────────────────────
+# ── CWE-78: Command Injection ─────────────────────────────────────────────────
 
 @app.route("/ping")
 def ping():
     """
     Ping a host and return the output.
 
-    FIX (CWE-78): User-supplied host is now validated against a strict
-    allowlist regex before use.  The subprocess call uses a list (not a
-    shell string) so shell=True is no longer required, eliminating the
-    command-injection vector entirely.
+    VULNERABILITY (CWE-78): User-supplied host is passed directly into a
+    shell command via shell=True. An attacker can inject arbitrary commands
+    using shell metacharacters (e.g., host=127.0.0.1;cat /etc/passwd).
     """
     host = request.args.get("host", "127.0.0.1")
 
-    # Validate host against allowlist pattern to reject shell metacharacters
-    if not _HOST_RE.match(host):
-        return jsonify({"error": "Invalid host"}), 400
-
-    # FIXED: shell=False (default) + argument list — no shell injection possible
+    # VULNERABLE: shell=True + unsanitised user input → command injection
     output = subprocess.check_output(
-        ["ping", "-c", "1", host],
-        shell=False,
+        f"ping -c 1 {host}",
+        shell=True,
         text=True,
     )
     return jsonify({"output": output})
