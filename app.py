@@ -32,7 +32,7 @@ app.config["DATABASE_URL"] = DATABASE_URL
 _DB_PATH = os.path.join(tempfile.gettempdir(), "app.db")
 os.environ.setdefault("APP_DB_PATH", _DB_PATH)
 
-# Allowlist: only valid hostname/IP characters (letters, digits, dots, hyphens)
+# Allowlist for valid hostname/IP characters (alphanumeric, dots, hyphens)
 _HOST_RE = re.compile(r'^[A-Za-z0-9.\-]+$')
 
 
@@ -41,7 +41,7 @@ def setup():
     init_db()
 
 
-# ── CWE-78: Command Injection ─────────────────────────────────────────────────
+# ── CWE-78: Command Injection (fixed) ─────────────────────────────────────────
 
 @app.route("/ping")
 def ping():
@@ -49,16 +49,16 @@ def ping():
     Ping a host and return the output.
 
     FIXED (CWE-78): User-supplied host is validated against an allowlist
-    pattern before use, shell=True is removed, and the command is passed
-    as a list to avoid shell interpretation.
+    pattern and passed as a list argument with shell=False, preventing
+    command injection via shell metacharacters.
     """
     host = request.args.get("host", "127.0.0.1")
 
-    # Validate host against allowlist: only hostname/IP safe characters allowed
+    # Validate host against allowlist: only alphanumeric, dots, and hyphens
     if not _HOST_RE.match(host):
         return jsonify({"error": "Invalid host"}), 400
 
-    # FIXED: shell=False (default) + argument list prevents command injection
+    # FIXED: shell=False + list-form args = no command injection
     output = subprocess.check_output(
         ["ping", "-c", "1", host],
         shell=False,
