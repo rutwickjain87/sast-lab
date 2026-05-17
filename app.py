@@ -13,6 +13,7 @@
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 import tempfile
 
@@ -31,28 +32,36 @@ app.config["DATABASE_URL"] = DATABASE_URL
 _DB_PATH = os.path.join(tempfile.gettempdir(), "app.db")
 os.environ.setdefault("APP_DB_PATH", _DB_PATH)
 
+# Allowlist for valid hostname/IP characters (alphanumeric, dots, hyphens)
+_HOST_RE = re.compile(r'^[A-Za-z0-9.\-]+$')
+
 
 @app.before_request
 def setup():
     init_db()
 
 
-# ── CWE-78: Command Injection ─────────────────────────────────────────────────
+# ── CWE-78: Command Injection (fixed) ─────────────────────────────────────────
 
 @app.route("/ping")
 def ping():
     """
     Ping a host and return the output.
 
-    VULNERABLE (CWE-78): User-supplied host is passed directly to subprocess
-    with shell=True, allowing command injection via shell metacharacters.
-    e.g. ?host=127.0.0.1; cat /etc/passwd
+    FIXED (CWE-78): User-supplied host is validated against an allowlist
+    pattern and passed as a list argument with shell=False, preventing
+    command injection via shell metacharacters.
     """
     host = request.args.get("host", "127.0.0.1")
-    # VULNERABLE: shell=True + user-controlled input = command injection
+
+    # Validate host against allowlist: only alphanumeric, dots, and hyphens
+    if not _HOST_RE.match(host):
+        return jsonify({"error": "Invalid host"}), 400
+
+    # FIXED: shell=False + list-form args = no command injection
     output = subprocess.check_output(
-        f"ping -c 1 {host}",
-        shell=True,
+        ["ping", "-c", "1", host],
+        shell=False,
         text=True,
     )
     return jsonify({"output": output})
