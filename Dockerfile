@@ -21,4 +21,4 @@ USER testrunner
 # Source is mounted at runtime by the agent (not copied here)
 # This lets the agent swap in the fixed files without rebuilding the image
 
-CMD ["python", "-m", "pytest", "tests/", "-v", "--tb=short", "--no-header"]
+CMD ["python", "-m", "pytest", "tests/", "-v", "--tb=short", "--no-header", "-p", "no:cacheprovider"]

@@ -12,7 +12,9 @@
 
 from __future__ import annotations
 
+import os
 import subprocess
+import tempfile
 
 from flask import Flask, jsonify, request
 
@@ -23,6 +25,11 @@ from utils import calculate, read_log
 app = Flask(__name__)
 app.config["SECRET_KEY"] = SECRET_KEY
 app.config["DATABASE_URL"] = DATABASE_URL
+
+# Use a writable temporary directory for the database so the app works
+# even when the working directory is read-only (e.g., during testing).
+_DB_PATH = os.path.join(tempfile.gettempdir(), "app.db")
+os.environ.setdefault("APP_DB_PATH", _DB_PATH)
 
 
 @app.before_request
@@ -37,16 +44,16 @@ def ping():
     """
     Ping a host and return the output.
 
-    VULNERABILITY (CWE-78): The host parameter is injected directly into
-    a shell command via shell=True. An attacker can pass
-    '127.0.0.1; cat /etc/passwd' to execute arbitrary commands.
+    VULNERABILITY (CWE-78): User-supplied host is passed directly into a
+    shell command via shell=True. An attacker can inject arbitrary commands
+    using shell metacharacters (e.g., host=127.0.0.1;cat /etc/passwd).
     """
     host = request.args.get("host", "127.0.0.1")
 
-    # VULNERABLE: shell=True + unsanitised user input = command injection
+    # VULNERABLE: shell=True + unsanitised user input → command injection
     output = subprocess.check_output(
         f"ping -c 1 {host}",
-        shell=True,          # noqa: S602
+        shell=True,
         text=True,
     )
     return jsonify({"output": output})
