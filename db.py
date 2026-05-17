@@ -6,11 +6,17 @@
 # an SQL query string. An attacker can inject arbitrary SQL.
 # e.g. username = "' OR '1'='1" bypasses authentication.
 
+import os
 import sqlite3
+
+# Honour APP_DB_PATH so the tests work inside a read-only Docker sandbox.
+# docker_tool.py passes -e APP_DB_PATH=/tmp/app.db into every container run,
+# pointing SQLite at the writable tmpfs mount instead of the read-only /app.
+_DB_PATH = os.environ.get("APP_DB_PATH", "app.db")
 
 
 def get_connection():
-    return sqlite3.connect("app.db")
+    return sqlite3.connect(_DB_PATH)
 
 
 def get_user(username: str) -> dict | None:
