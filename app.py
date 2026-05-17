@@ -39,31 +39,21 @@ def setup():
 
 # ── CWE-78: Command Injection ─────────────────────────────────────────────────
 
-# Allowlist of permitted hosts for the ping endpoint.
-_PING_ALLOWLIST = {
-    "127.0.0.1",
-    "localhost",
-}
-
 @app.route("/ping")
 def ping():
     """
     Ping a host and return the output.
 
-    FIXED (CWE-78): User-supplied host is now validated against an allowlist
-    and passed as a list argument (shell=False) to subprocess, preventing
-    command injection via shell metacharacters.
+    VULNERABILITY (CWE-78): User-supplied host is passed directly into a
+    shell command via shell=True. An attacker can inject arbitrary commands
+    using shell metacharacters (e.g., host=127.0.0.1;cat /etc/passwd).
     """
     host = request.args.get("host", "127.0.0.1")
 
-    # Validate host against an allowlist to prevent command injection.
-    if host not in _PING_ALLOWLIST:
-        return jsonify({"error": "host not allowed"}), 400
-
-    # FIXED: shell=False + list arguments — no shell interpretation possible.
+    # VULNERABLE: shell=True + unsanitised user input → command injection
     output = subprocess.check_output(
-        ["ping", "-c", "1", host],
-        shell=False,
+        f"ping -c 1 {host}",
+        shell=True,
         text=True,
     )
     return jsonify({"output": output})
@@ -124,5 +114,4 @@ def health():
 
 
 if __name__ == "__main__":
-    debug_mode = os.environ.get("FLASK_DEBUG", "false").lower() == "true"
-    app.run(debug=debug_mode, host="127.0.0.1", port=5000)
+    app.run(debug=True, host="0.0.0.0", port=5000)
