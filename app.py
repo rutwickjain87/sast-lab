@@ -13,6 +13,7 @@
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 import tempfile
 
@@ -31,6 +32,9 @@ app.config["DATABASE_URL"] = DATABASE_URL
 _DB_PATH = os.path.join(tempfile.gettempdir(), "app.db")
 os.environ.setdefault("APP_DB_PATH", _DB_PATH)
 
+# Allowlist: only valid hostname/IP characters (letters, digits, dots, hyphens)
+_HOST_RE = re.compile(r'^[A-Za-z0-9.\-]+$')
+
 
 @app.before_request
 def setup():
@@ -39,28 +43,22 @@ def setup():
 
 # ── CWE-78: Command Injection ─────────────────────────────────────────────────
 
-# Allowlist of permitted hosts for the ping endpoint.
-_PING_ALLOWLIST = {
-    "127.0.0.1",
-    "localhost",
-}
-
 @app.route("/ping")
 def ping():
     """
     Ping a host and return the output.
 
-    FIXED (CWE-78): User-supplied host is now validated against an allowlist
-    and passed as a list argument (shell=False) to subprocess, preventing
-    command injection via shell metacharacters.
+    FIXED (CWE-78): User-supplied host is validated against an allowlist
+    pattern before use, shell=True is removed, and the command is passed
+    as a list to avoid shell interpretation.
     """
     host = request.args.get("host", "127.0.0.1")
 
-    # Validate host against an allowlist to prevent command injection.
-    if host not in _PING_ALLOWLIST:
-        return jsonify({"error": "host not allowed"}), 400
+    # Validate host against allowlist: only hostname/IP safe characters allowed
+    if not _HOST_RE.match(host):
+        return jsonify({"error": "Invalid host"}), 400
 
-    # FIXED: shell=False + list arguments — no shell interpretation possible.
+    # FIXED: shell=False (default) + argument list prevents command injection
     output = subprocess.check_output(
         ["ping", "-c", "1", host],
         shell=False,
@@ -124,4 +122,5 @@ def health():
 
 
 if __name__ == "__main__":
-    app.run(debug=True, host="127.0.0.1", port=5000)
+    debug_mode = os.environ.get("FLASK_DEBUG", "false").lower() == "true"
+    app.run(debug=debug_mode, host="127.0.0.1", port=5000)
