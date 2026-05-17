@@ -13,6 +13,7 @@
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 import tempfile
 
@@ -31,6 +32,9 @@ app.config["DATABASE_URL"] = DATABASE_URL
 _DB_PATH = os.path.join(tempfile.gettempdir(), "app.db")
 os.environ.setdefault("APP_DB_PATH", _DB_PATH)
 
+# Allowlist for valid hostname/IP characters (alphanumeric, dots, hyphens only)
+_HOST_ALLOWLIST_RE = re.compile(r'^[a-zA-Z0-9.\-]+$')
+
 
 @app.before_request
 def setup():
@@ -44,16 +48,21 @@ def ping():
     """
     Ping a host and return the output.
 
-    VULNERABILITY (CWE-78): User-supplied host is passed directly into a
-    shell command via shell=True. An attacker can inject arbitrary commands
-    using shell metacharacters (e.g., host=127.0.0.1;cat /etc/passwd).
+    FIX (CWE-78): User-supplied host is now validated against an allowlist
+    of safe characters (alphanumeric, dots, hyphens) before use. The
+    subprocess call uses a list (shell=False) instead of a shell string,
+    eliminating the command injection vector entirely.
     """
     host = request.args.get("host", "127.0.0.1")
 
-    # VULNERABLE: shell=True + unsanitised user input → command injection
+    # Validate host against allowlist: only permit hostname/IP-safe characters
+    if not _HOST_ALLOWLIST_RE.match(host):
+        return jsonify({"error": "Invalid host value"}), 400
+
+    # FIXED: shell=False + list arguments — no shell interpolation possible
     output = subprocess.check_output(
-        f"ping -c 1 {host}",
-        shell=True,
+        ["ping", "-c", "1", host],
+        shell=False,
         text=True,
     )
     return jsonify({"output": output})
