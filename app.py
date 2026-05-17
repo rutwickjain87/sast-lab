@@ -39,31 +39,20 @@ def setup():
 
 # ── CWE-78: Command Injection ─────────────────────────────────────────────────
 
-# Allowlist of permitted hosts for the ping endpoint.
-_PING_ALLOWLIST = {
-    "127.0.0.1",
-    "localhost",
-}
-
 @app.route("/ping")
 def ping():
     """
     Ping a host and return the output.
 
-    FIXED (CWE-78): User-supplied host is now validated against an allowlist
-    and passed as a list argument (shell=False) to subprocess, preventing
-    command injection via shell metacharacters.
+    VULNERABLE (CWE-78): User-supplied host is passed directly to subprocess
+    with shell=True, allowing command injection via shell metacharacters.
+    e.g. ?host=127.0.0.1; cat /etc/passwd
     """
     host = request.args.get("host", "127.0.0.1")
-
-    # Validate host against an allowlist to prevent command injection.
-    if host not in _PING_ALLOWLIST:
-        return jsonify({"error": "host not allowed"}), 400
-
-    # FIXED: shell=False + list arguments — no shell interpretation possible.
+    # VULNERABLE: shell=True + user-controlled input = command injection
     output = subprocess.check_output(
-        ["ping", "-c", "1", host],
-        shell=False,
+        f"ping -c 1 {host}",
+        shell=True,
         text=True,
     )
     return jsonify({"output": output})
